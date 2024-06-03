@@ -1,7 +1,7 @@
 pub const TILE_SIZE: f32 = 200.0;
-pub const PIECE_SIZE_S: f32 = 100.0;
-pub const PIECE_SIZE_M: f32 = 175.0;
-pub const PIECE_SIZE_L: f32 = 250.0;
+pub const PIECE_SIZE_S: f32 = 0.5;
+pub const PIECE_SIZE_M: f32 = 1.0;
+pub const PIECE_SIZE_L: f32 = 1.5;
 pub const BOARD_WIDTH_UNITS: usize = 3;
 pub const BOARD_HEIGHT_UNITS: usize = 3;
 pub const BOARD_LAYER: f32 = 10.;

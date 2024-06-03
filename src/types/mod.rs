@@ -1,4 +1,3 @@
-mod piece_color;
 mod piece_size;
 mod player;
 mod tile_coord;

@@ -1,9 +1,12 @@
 use crate::actions::spawn_piece;
 use crate::components::Piece;
 use crate::events::{GameOverEvent, TileChosenEvent};
-use crate::resources::{GameState, PlayerTurn};
+use crate::resources::PlayerTurn;
+use crate::states::AppState;
 use crate::types::{Coord, PieceSize, Player};
-use bevy::prelude::{AssetServer, Commands, EventReader, EventWriter, Query, Res, ResMut};
+use bevy::prelude::{
+    AssetServer, Commands, EventReader, EventWriter, NextState, Query, Res, ResMut,
+};
 use bevy::utils::HashSet;
 
 pub fn tile_chosen_event_handler(
@@ -11,92 +14,72 @@ pub fn tile_chosen_event_handler(
     mut game_over_event_writer: EventWriter<GameOverEvent>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut game_state: ResMut<GameState>,
+    mut app_state: ResMut<NextState<AppState>>,
     mut player_turn: ResMut<PlayerTurn>,
     q_pieces: Query<&Piece>,
 ) {
     for event in tile_chosen_event_reader.read() {
         let player = event.player().clone();
-        let tile_coord = event.tile_coord().clone();
+        let coord = event.coord().clone();
         let piece_size = event.piece_size().clone();
         println!(
             "Player {:?} chose tile {:?} with piece size {:?}",
-            player, tile_coord, piece_size
+            player, coord, piece_size
         );
         println!("=============>>>>");
 
-        let validation_result = validate_move(&q_pieces, &tile_coord, &piece_size);
+        let validation_result = validate_move(&q_pieces, &coord, &piece_size);
         if !validation_result {
-            game_state.set_playing();
+            app_state.set(AppState::Playing);
             return;
         }
 
-        if validate_board_for_win(&q_pieces, &player) {
-            game_state.set_game_over();
-            game_over_event_writer.send(GameOverEvent);
+        let piece = Piece::new(piece_size, player, coord);
+        spawn_piece(&mut commands, &asset_server, piece);
+
+        if validate_board_for_win(&q_pieces, &player, coord.clone()) {
+            app_state.set(AppState::GameOver);
+            game_over_event_writer.send(GameOverEvent::new(player.clone()));
             return;
         }
 
-        spawn_piece(
-            &mut commands,
-            &asset_server,
-            Piece::new(piece_size, player, tile_coord),
-        );
         player_turn.switch();
         player_turn.reset_chosen_piece_size();
-        game_state.set_playing();
+        app_state.set(AppState::Playing);
     }
 }
 
 /// check 3x3 board - horizontal, vertical, diagonal
-fn validate_board_for_win(q_pieces: &Query<&Piece>, player: &Player) -> bool {
-    let coords = q_pieces
+fn validate_board_for_win(q_pieces: &Query<&Piece>, player: &Player, coord: Coord) -> bool {
+    let mut xys = q_pieces
         .iter()
         .filter(|piece| piece.player() == *player)
-        .map(|piece| piece.coord())
-        .collect::<HashSet<Coord>>();
+        .map(|piece| {
+            let coord = piece.coord();
+            (coord.x(), coord.y())
+        })
+        .collect::<HashSet<(usize, usize)>>();
+    xys.insert((coord.x(), coord.y()));
 
-    // check if coords has item at 0,0, 0,1, 0,2
-    if coords.contains(&Coord::new(0, 0))
-        && coords.contains(&Coord::new(0, 1))
-        && coords.contains(&Coord::new(0, 2))
-    {
-        return true;
-    }
+    println!("Coords: {:?}", xys);
 
-    // check if coords has item at 1,0, 1,1, 1,2
-    if coords.contains(&Coord::new(1, 0))
-        && coords.contains(&Coord::new(1, 1))
-        && coords.contains(&Coord::new(1, 2))
-    {
-        return true;
-    }
+    let x0 = xys.contains(&(0, 0)) && xys.contains(&(0, 1)) && xys.contains(&(0, 2));
+    let x1 = xys.contains(&(1, 0)) && xys.contains(&(1, 1)) && xys.contains(&(1, 2));
+    let x2 = xys.contains(&(2, 0)) && xys.contains(&(2, 1)) && xys.contains(&(2, 2));
 
-    // check if coords has item at 2,0, 2,1, 2,2
-    if coords.contains(&Coord::new(2, 0))
-        && coords.contains(&Coord::new(2, 1))
-        && coords.contains(&Coord::new(2, 2))
-    {
-        return true;
-    }
+    let y0 = xys.contains(&(0, 0)) && xys.contains(&(1, 0)) && xys.contains(&(2, 0));
+    let y1 = xys.contains(&(0, 1)) && xys.contains(&(1, 1)) && xys.contains(&(2, 1));
+    let y2 = xys.contains(&(0, 2)) && xys.contains(&(1, 2)) && xys.contains(&(2, 2));
 
-    // check if coords has item at 0,0 1,1 2,2
-    if coords.contains(&Coord::new(0, 0))
-        && coords.contains(&Coord::new(1, 1))
-        && coords.contains(&Coord::new(2, 1))
-    {
-        return true;
-    }
+    let d0 = xys.contains(&(0, 0)) && xys.contains(&(1, 1)) && xys.contains(&(2, 2));
+    let d1 = xys.contains(&(0, 2)) && xys.contains(&(1, 1)) && xys.contains(&(2, 0));
 
-    // check if coords has item at 0,2 1,1 2,0
-    if coords.contains(&Coord::new(0, 2))
-        && coords.contains(&Coord::new(1, 1))
-        && coords.contains(&Coord::new(2, 0))
-    {
-        return true;
-    }
+    println!(
+        "Winning: x0: {}, x1: {}, x2: {}, y0: {}, y1: {}, y2: {}, d0: {}, d1: {}",
+        x0, x1, x2, y0, y1, y2, d0, d1
+    );
 
-    return false;
+    return x0 || x1 || x2 || y0 || y1 || y2 || d0 || d1;
 }
 
 fn validate_move(q_pieces: &Query<&Piece>, coord: &Coord, new_value: &PieceSize) -> bool {

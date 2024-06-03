@@ -4,7 +4,7 @@ use bevy::prelude::Event;
 #[derive(Event)]
 pub struct TileChosenEvent {
     player: Player,
-    tile_coord: Coord,
+    coord: Coord,
     piece_size: PieceSize,
 }
 
@@ -12,7 +12,7 @@ impl TileChosenEvent {
     pub fn new(player: Player, tile_coord: Coord, piece_size: PieceSize) -> Self {
         TileChosenEvent {
             player,
-            tile_coord,
+            coord: tile_coord,
             piece_size,
         }
     }
@@ -21,8 +21,8 @@ impl TileChosenEvent {
         self.player.clone()
     }
 
-    pub fn tile_coord(&self) -> Coord {
-        self.tile_coord.clone()
+    pub fn coord(&self) -> Coord {
+        self.coord.clone()
     }
 
     pub fn piece_size(&self) -> PieceSize {

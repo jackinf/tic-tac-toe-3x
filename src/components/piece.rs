@@ -1,7 +1,7 @@
 use crate::types::{Coord, PieceSize, Player};
 use bevy::prelude::Component;
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Clone)]
 pub struct Piece {
     size: PieceSize,
     player: Player,

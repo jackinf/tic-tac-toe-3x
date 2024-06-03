@@ -8,6 +8,7 @@ use bevy::prelude::{
     AssetServer, Commands, EventReader, EventWriter, NextState, Query, Res, ResMut,
 };
 use bevy::utils::HashSet;
+use std::collections::HashMap;
 
 pub fn tile_chosen_event_handler(
     mut tile_chosen_event_reader: EventReader<TileChosenEvent>,
@@ -30,14 +31,15 @@ pub fn tile_chosen_event_handler(
 
         let validation_result = validate_move(&q_pieces, &coord, &piece_size);
         if !validation_result {
+            println!("Invalid move");
             app_state.set(AppState::Playing);
             return;
         }
 
-        let piece = Piece::new(piece_size, player, coord);
+        let piece = Piece::new(piece_size.clone(), player, coord);
         spawn_piece(&mut commands, &asset_server, piece);
 
-        if validate_board_for_win(&q_pieces, &player, coord.clone()) {
+        if validate_board_for_win(&q_pieces, &player, coord.clone(), piece_size.clone()) {
             app_state.set(AppState::GameOver);
             game_over_event_writer.send(GameOverEvent::new(player.clone()));
             return;
@@ -50,18 +52,45 @@ pub fn tile_chosen_event_handler(
 }
 
 /// check 3x3 board - horizontal, vertical, diagonal
-fn validate_board_for_win(q_pieces: &Query<&Piece>, player: &Player, coord: Coord) -> bool {
-    let mut xys = q_pieces
-        .iter()
-        .filter(|piece| piece.player() == *player)
-        .map(|piece| {
-            let coord = piece.coord();
-            (coord.x(), coord.y())
-        })
-        .collect::<HashSet<(usize, usize)>>();
-    xys.insert((coord.x(), coord.y()));
+fn validate_board_for_win(
+    q_pieces: &Query<&Piece>,
+    player: &Player,
+    coord: Coord,
+    size: PieceSize,
+) -> bool {
+    let mut my_pieces: HashMap<(usize, usize), PieceSize> = HashMap::new();
+    let mut other_pieces: HashMap<(usize, usize), PieceSize> = HashMap::new();
 
-    println!("Coords: {:?}", xys);
+    my_pieces.insert((coord.x(), coord.y()), size);
+
+    for piece in q_pieces.iter() {
+        let coord1 = piece.coord();
+        let key = (coord1.x(), coord1.y());
+
+        if piece.player() == *player {
+            let entry = my_pieces.entry(key).or_insert(piece.size());
+            if piece.size() > *entry {
+                *entry = piece.size();
+            }
+        } else {
+            let entry = other_pieces.entry(key).or_insert(piece.size());
+            if piece.size() > *entry {
+                *entry = piece.size();
+            }
+        }
+    }
+
+    let mut xys: HashSet<(usize, usize)> = HashSet::new();
+
+    for (coord, size) in my_pieces.iter() {
+        if let Some(other_piece_size) = other_pieces.get(coord) {
+            if size > other_piece_size {
+                xys.insert(*coord);
+            }
+        } else {
+            xys.insert(*coord);
+        }
+    }
 
     let x0 = xys.contains(&(0, 0)) && xys.contains(&(0, 1)) && xys.contains(&(0, 2));
     let x1 = xys.contains(&(1, 0)) && xys.contains(&(1, 1)) && xys.contains(&(1, 2));
@@ -79,15 +108,20 @@ fn validate_board_for_win(q_pieces: &Query<&Piece>, player: &Player, coord: Coor
         x0, x1, x2, y0, y1, y2, d0, d1
     );
 
-    return x0 || x1 || x2 || y0 || y1 || y2 || d0 || d1;
+    x0 || x1 || x2 || y0 || y1 || y2 || d0 || d1
 }
 
 fn validate_move(q_pieces: &Query<&Piece>, coord: &Coord, new_value: &PieceSize) -> bool {
-    let piece = q_pieces.iter().find(|piece| piece.coord() == *coord);
-    println!("Found piece: {:?}", piece);
+    let pieces: Vec<Piece> = q_pieces
+        .iter()
+        .filter(|piece| piece.coord() == *coord)
+        .cloned()
+        .collect::<Vec<Piece>>();
+    println!("Found pqiece: {:?}", pieces);
 
-    return match piece {
-        Some(piece) => piece.size() < *new_value,
-        None => true,
-    };
+    if pieces.is_empty() {
+        return true;
+    }
+
+    pieces.iter().all(|piece| piece.size() < *new_value)
 }
